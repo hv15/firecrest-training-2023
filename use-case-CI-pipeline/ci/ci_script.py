@@ -1,6 +1,7 @@
 import firecrest as fc
 import os
 import time
+import requests
 import argparse
 import utilities as util
 
@@ -17,9 +18,6 @@ final_slurm_states = {
     'PREEMPTED',
     'TIMEOUT',
 }
-
-# If you are working on the CI-pipeline use case remove the line bellow:
-exit(0)
 
 # Setup variables of the client as secrets,
 # no need to change anything here
@@ -41,19 +39,45 @@ ref = args.branch
 print(f"Will try to run the ci in system {system_name} on branch {ref}")
 
 # Setup up a firecrest client
-keycloak = None
-client = None
+data = {
+    "grant_type": "client_credentials",
+    "client_id": CLIENT_ID,
+    "client_secret": CLIENT_SECRET,
+}
+response = requests.post(
+    AUTH_TOKEN_URL,
+    data=data,
+)
 
-script_content = util.create_batch_script(repo=args.repo, constraint='gpu', num_nodes=2, account=args.account, custom_modules=['cray-python'], branch=ref)
-with open("submission_script.sh", "w") as fp:
-    fp.write(script_content)
+if response.status_code != 200:
+    print(f'Unable to authenticate!')
+    exit(1)
 
-# Check the status of the system and print it in the console
+TOKEN = response.json()["access_token"]
+
+response = requests.get(
+    url=f'{FIRECREST_URL}/status/systems',
+    headers={'Authorization': f'Bearer {TOKEN}'}
+)
+
+if response.status_code != 200:
+    print(f'Unable to check !')
+    exit(1)
+
+status = "unavailable"
+for system in response.json()["out"]:
+    if system["system"] == system_name:
+        status = system["status"]
+        break
 
 # If the status is available submit and poll every 30 secs until
 # it reaches a final state
 if status == "available":
-    pass
+    script_content = util.create_batch_script(repo=args.repo, constraint='gpu', num_nodes=2, account=args.account, custom_modules=['cray-python'], branch=ref)
+    with open("submission_script.sh", "w") as fp:
+        fp.write(script_content)
+
+
 
     # Print the filename of stdout and stderr in the console,
     # as well as their content
