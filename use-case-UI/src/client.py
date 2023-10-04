@@ -220,7 +220,9 @@ def list_jobs_with_f7t(system_name: str, job_ids: list[int]) -> dict:
     if not job_ids:
         return {'jobs': [], 'error': 0}
 
-    jobs = f7t_client.poll_active(system_name, job_ids)
+    #active_jobs = f7t_client.poll_active(system_name, job_ids)
+    queued_jobs = f7t_client.poll(system_name, job_ids)
+    jobs = queued_jobs
 
     if not jobs:
         return {'jobs': [], 'error': 1}

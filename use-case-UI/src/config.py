@@ -13,10 +13,10 @@ class DevConfig(Config):
     SESSION_TYPE = "filesystem"
     FIRECREST_URL='https://firecrest.cscs.ch'
     SYSTEM_NAME='daint'
-    SYSTEM_PARTITIONS=['normal']
-    SYSTEM_RESERVATION='firecrest_api'
-    USER_GROUP='class08'
-    SYSTEM_CONSTRAINTS=['gpu']
+    SYSTEM_PARTITIONS=['normal', 'xfer']
+    SYSTEM_RESERVATION=None
+    USER_GROUP='FILL ME IN'
+    SYSTEM_CONSTRAINTS=['mc', 'gpu', 'ssd']
     PROBLEM_SUBDIR = "f7t_training"
     PROBLEM_FILES = []
     SBATCH_TEMPLATE = "demo.sh.tmpl"
