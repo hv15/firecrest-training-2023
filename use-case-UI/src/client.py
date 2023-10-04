@@ -92,8 +92,7 @@ def is_system_avail_f7t(system_name: str) -> bool:
         - Returns:
           - `bool`
     '''
-
-    return False
+    return f7t_client.system(system_name)['status'] == 'available'
 
 def list_files_with_f7t(system_name: str, target_path: str) -> list:
     '''
@@ -107,10 +106,9 @@ def list_files_with_f7t(system_name: str, target_path: str) -> list:
         - Returns:
           - `list` | `None`
     '''
+    lsfiles = f7t_client.list_files(system_name, target_path)
 
-    return None
-
-
+    return lsfiles
 
 def get_username_with_f7t(system_name):
     '''
@@ -123,8 +121,7 @@ def get_username_with_f7t(system_name):
         - Returns:
           - str|None
     '''
-
-    return None
+    return f7t_client.whoami(system_name)
 
 def get_base_fs_with_f7t(system_name: str) -> str:
     '''
@@ -136,10 +133,27 @@ def get_base_fs_with_f7t(system_name: str) -> str:
         - Returns:
           - `None`
     '''
-    
+    client_storage_params = f7t_client.parameters()["storage"]
 
+    if DEBUG:
+        app.logger.debug(f"Client Storage Parameters: {client_storage_params}")
+
+    fslist = None
+    for storage in client_storage_params:
+        if storage["name"] == "FILESYSTEMS":
+            fslist = storage["value"]
+            break
+
+    if not fslist:
+        app.logger.error(f"FirecREST parameters are malformed, unable to get FILESYSTEMS!")
+        return None
+
+    for fs in fslist:
+        if fs["system"] == system_name:
+            return fs["mounted"][0]
+
+    app.logger.error(f"Base filesystem mount for {system_name} not found!")
     return None
-
 
 def submit_job_with_f7t(system_name: str, job_script: str) -> dict:
 
@@ -156,8 +170,13 @@ def submit_job_with_f7t(system_name: str, job_script: str) -> dict:
           - `dict`
 
     '''
+    try:
+        subinfo = f7t_client.submit(system_name, job_script)
+    except f7t.FirecrestException as fe:
+        app.logger.error(f"Submit error {fe}")
+        return {"job": "Error message", "error": 1}
 
-    return {"job": "Error message", "error": 1}
+    return {"job": subinfo, "error": 0}
 
 
 def mkdir_with_f7t(system_name: str, target_path: str) -> bool:
@@ -173,8 +192,13 @@ def mkdir_with_f7t(system_name: str, target_path: str) -> bool:
       - `bool`
 
     '''
+    try:
+        resq = f7t_client.mkdir(system_name, target_path, p = True)
+    except f7t.FirecrestException as fe:
+        app.logger.error(f"Mkdir error {fe}")
+        return False
 
-    return False
+    return True
 
 
 def list_jobs_with_f7t(system_name: str, job_ids: list[int]) -> dict:
@@ -185,7 +209,7 @@ def list_jobs_with_f7t(system_name: str, job_ids: list[int]) -> dict:
 
     If the job_ids list is empty return {"jobs":[], "error": 0}, 
     otherwise a list of `firecrest.types.JobQueue`
-      
+
     - Parameters:
       - `system_name`: str
       - `job_ids`: list[int]
@@ -193,9 +217,15 @@ def list_jobs_with_f7t(system_name: str, job_ids: list[int]) -> dict:
     - Returns
       - dict: {"jobs": firecrest.types.JobQueue | [], "error": int}
     '''
+    if not job_ids:
+        return {'jobs': [], 'error': 0}
 
-    
-    return []
+    jobs = f7t_client.poll_active(system_name, job_ids)
+
+    if not jobs:
+        return {'jobs': [], 'error': 1}
+
+    return {'jobs': jobs, 'error': 0}
 
 def mkdir(jobName):
 
@@ -238,9 +268,8 @@ def list_jobs():
 
     f7t_jobs = list_jobs_with_f7t(SYSTEM_NAME, list(JOB_LIST.keys()))
 
-    if f7t_jobs["error"] == 0:
+    if "error" in f7t_jobs and f7t_jobs["error"] == 0:
         return {"rows": f7t_jobs["jobs"]}
-    
 
     return jsonify(response="Error listing jobs"), 400
 
@@ -492,6 +521,7 @@ def submit_job():
     reservation = None
     if SYSTEM_RESERVATION != '':
         reservation = SYSTEM_RESERVATION
+
     if DEBUG:
         app.logger.debug(f"Reservation to use: {reservation}")
     
